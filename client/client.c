@@ -2,8 +2,8 @@
 
 char domain[100], ip[100];
 
-int sd;
-struct sockaddr_in server;
+int socketDescriptor;
+struct sockaddr_in resolver;
 
 extern int errno;
 
@@ -27,22 +27,19 @@ void readDomainFromStdin()
     }
 }
 
-void connectToServer()
+void connectToResolver()
 {
-    int sd;
-    struct sockaddr_in server;
-
-    if ((sd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+    if ((socketDescriptor = socket(AF_INET, SOCK_STREAM, 0)) == -1)
     {
         perror("Socket error!\n");
         exit(errno);
     }
 
-    server.sin_family = AF_INET;
-    server.sin_addr.s_addr = inet_addr(IP);
-    server.sin_port = htons(RESOLVER_PORT);
+    resolver.sin_family = AF_INET;
+    resolver.sin_addr.s_addr = inet_addr(IP);
+    resolver.sin_port = htons(RESOLVER_PORT);
 
-    if (connect(sd, (struct sockaddr *)&server, sizeof(struct sockaddr)) == -1)
+    if (connect(socketDescriptor, (struct sockaddr *)&resolver, sizeof(struct sockaddr)) == -1)
     {
         perror("Connect error!.\n");
         exit (errno);
@@ -54,7 +51,7 @@ bool isDomainInCache()
     char data[100];
 
     FILE *f = fopen(CLIENT_CACHE_FILE, "r");
-    while (fgets(data, 100, f) != NULL)
+    while (fgets(data, sizeof(data), f) != NULL)
     {
         char *token = strtok(data, " ");
         if (strcmp(token, domain) == 0)
@@ -68,9 +65,19 @@ bool isDomainInCache()
     return false;
 }
 
-void writeDomainToServer()
+void writeDomainToServer(int argc)
 {
-    if (write(sd, domain, strlen(domain)) <= 0)
+    char request[100];
+
+    if(argc > 2){
+        request[0] = 'r';
+    } else {
+        request[0] = 'i';
+    }
+
+    strcpy(request + 1, domain);
+
+    if (write(socketDescriptor, request, strlen(request)) <= 0)
     {
         perror("Write to resolver error!\n");
         exit(errno);
@@ -79,7 +86,7 @@ void writeDomainToServer()
 
 void readIpFromServer()
 {
-    if (read(sd, ip, sizeof(ip)) < 0)
+    if (read(socketDescriptor, ip, sizeof(ip)) < 0)
     {
         perror("Read error!\n");
         exit(errno);
@@ -105,12 +112,12 @@ int main(int argc, char *argv[]){
 
     if(!isDomainInCache())
     {
-        writeDomainToServer();
+        writeDomainToServer(argc);
         readIpFromServer();
         saveIpInCache();
     }
 
     printIp();
 
-    close(sd);
+    close(socketDescriptor);
 }
