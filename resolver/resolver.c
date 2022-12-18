@@ -8,6 +8,12 @@ typedef struct ThreadInfo
     int acceptDescriptor;
 };
 
+struct ThreadsList{
+    pthread_t thread;
+    struct ThreadInfo* threadInfo;
+    struct ThreadsList* next;
+} *start, *last;
+
 struct sockaddr_in server;
 struct sockaddr_in client;
 
@@ -16,12 +22,6 @@ int idThreadCounter;
 
 static void *treat(void *);
 void raspunde(void *);
-
-struct ThreadsList{
-    pthread_t thread;
-    struct ThreadInfo* threadInfo;
-    struct ThreadsList* next;
-} *start, *last;
 
 void createAndOpenServer(){
     if ((socketDescriptor = socket(AF_INET, SOCK_STREAM, 0)) == -1)
@@ -86,13 +86,6 @@ void serveClients(){
         pthread_create(last->thread, NULL, &treat, last->threadInfo);
     }
 }
-
-int main()
-{
-    createAndOpenServer();
-
-    serveClients();
-};
 
 void *treat(void *arg)
 {
@@ -282,3 +275,10 @@ void communicateWithClient(void *arg)
         perror("Write to client error!\n");
     }
 }
+
+int main()
+{
+    createAndOpenServer();
+
+    serveClients();
+};
