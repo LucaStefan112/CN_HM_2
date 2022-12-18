@@ -1,150 +1,152 @@
-/* servTCPConcTh2.c - Exemplu de server TCP concurent care deserveste clientii
-   prin crearea unui thread pentru fiecare client.
-   Asteapta un numar de la clienti si intoarce clientilor numarul incrementat.
-    Intoarce corect identificatorul din program al thread-ului.
+#include "../includes.h"
 
-
-   Autor: Lenuta Alboaie  <adria@infoiasi.ro> (c)2009
-*/
-
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <errno.h>
-#include <unistd.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <signal.h>
-#include <pthread.h>
-
-/* portul folosit */
-#define PORT 2908
-
-/* codul de eroare returnat de anumite apeluri */
 extern int errno;
 
-typedef struct thData
+typedef struct ThreadInfo
 {
-    int idThread; // id-ul thread-ului tinut in evidenta de acest program
-    int cl;       // descriptorul intors de accept
-} thData;
+    int idThread;
+    int acceptDescriptor;
+};
 
-static void *treat(void *); /* functia executata de fiecare thread ce realizeaza comunicarea cu clientii */
+struct sockaddr_in server;
+struct sockaddr_in from;
+
+int socketDescriptor;
+int idThreadCounter;
+
+static void *treat(void *);
 void raspunde(void *);
 
-int main()
-{
-    struct sockaddr_in server; // structura folosita de server
-    struct sockaddr_in from;
-    int nr; // mesajul primit de trimis la client
-    int sd; // descriptorul de socket
-    int pid;
-    pthread_t th[100]; // Identificatorii thread-urilor care se vor crea
-    int i = 0;
+struct ThreadsList{
+    pthread_t thread;
+    struct ThreadInfo* threadInfo;
+    struct ThreadsList* next;
+} *start, *last;
 
-    /* crearea unui socket */
-    if ((sd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+void createAndOpenServer(){
+    if ((socketDescriptor = socket(AF_INET, SOCK_STREAM, 0)) == -1)
     {
-        perror("[server]Eroare la socket().\n");
+        perror("Socket error!\n");
         return errno;
     }
-    /* utilizarea optiunii SO_REUSEADDR */
-    int on = 1;
-    setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
 
-    /* pregatirea structurilor de date */
+    int on = 1;
+    setsockopt(socketDescriptor, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+
     bzero(&server, sizeof(server));
     bzero(&from, sizeof(from));
 
-    /* umplem structura folosita de server */
-    /* stabilirea familiei de socket-uri */
     server.sin_family = AF_INET;
-    /* acceptam orice adresa */
     server.sin_addr.s_addr = htonl(INADDR_ANY);
-    /* utilizam un port utilizator */
-    server.sin_port = htons(PORT);
+    server.sin_port = htons(ROOT_PORT);
 
-    /* atasam socketul */
-    if (bind(sd, (struct sockaddr *)&server, sizeof(struct sockaddr)) == -1)
+    if (bind(socketDescriptor, (struct sockaddr *)&server, sizeof(struct sockaddr)) == -1)
     {
-        perror("[server]Eroare la bind().\n");
+        perror("Bind error!\n");
         return errno;
     }
 
-    /* punem serverul sa asculte daca vin clienti sa se conecteze */
-    if (listen(sd, 2) == -1)
+    if (listen(socketDescriptor, 5) == -1)
     {
-        perror("[server]Eroare la listen().\n");
+        perror("Listen error.\n");
         return errno;
     }
-    /* servim in mod concurent clientii...folosind thread-uri */
-    while (1)
-    {
-        int client;
-        thData *td; // parametru functia executata de thread
+}
+
+void serveClients(){
+    while(true){
+        int fromDescriptor;
         int length = sizeof(from);
 
-        printf("[server]Asteptam la portul %d...\n", PORT);
+        printf("Listening on port %d...\n", RESOLVER_PORT);
         fflush(stdout);
 
-        // client= malloc(sizeof(int));
-        /* acceptam un client (stare blocanta pina la realizarea conexiunii) */
-        if ((client = accept(sd, (struct sockaddr *)&from, &length)) < 0)
+        if ((fromDescriptor = accept(socketDescriptor, (struct sockaddr *)&from, &length)) < 0)
         {
-            perror("[server]Eroare la accept().\n");
+            perror("Accept error!\n");
             continue;
         }
 
-        /* s-a realizat conexiunea, se astepta mesajul */
+        if(idThreadCounter == 0){
+            start = (struct ThreadsList*)malloc(sizeof(struct ThreadsList));
+            start->threadInfo = (struct ThreadInfo*)malloc(sizeof(struct ThreadInfo));
+            start->threadInfo->idThread = idThreadCounter++;
+            start->threadInfo->acceptDescriptor = fromDescriptor;
+            start->next = NULL;
+            last = start;
+        } else {
+            last->next = (struct ThreadsList*)malloc(sizeof(struct ThreadsList));
+            last->next->threadInfo = (struct ThreadInfo*)malloc(sizeof(struct ThreadInfo));
+            last->next->threadInfo->idThread = idThreadCounter++;
+            last->next->threadInfo->acceptDescriptor = fromDescriptor;
+            last->next->next = NULL;
+            last = last->next;
+        }
 
-        // int idThread; //id-ul threadului
-        // int cl; //descriptorul intors de accept
+        pthread_create(last->thread, NULL, &treat, last->threadInfo);
+    }
+}
 
-        td = (struct thData *)malloc(sizeof(struct thData));
-        td->idThread = i++;
-        td->cl = client;
-
-        pthread_create(&th[i], NULL, &treat, td);
-
-    } // while
-};
-static void *treat(void *arg)
+int main()
 {
-    struct thData tdL;
-    tdL = *((struct thData *)arg);
-    printf("[thread]- %d - Asteptam mesajul...\n", tdL.idThread);
+    createAndOpenServer();
+
+    serveClients();
+};
+
+void *treat(void *arg)
+{
+    struct ThreadInfo thisThread;
+    thisThread = *((struct ThreadInfo *)arg);
     fflush(stdout);
     pthread_detach(pthread_self());
-    raspunde((struct thData *)arg);
-    /* am terminat cu acest client, inchidem conexiunea */
+
+    communicateWithClient((struct thData *)arg);
+    
     close((intptr_t)arg);
+    
     return (NULL);
 };
 
-void raspunde(void *arg)
+void communicateWithClient(void *arg)
 {
-    int nr, i = 0;
-    struct thData tdL;
-    tdL = *((struct thData *)arg);
-    if (read(tdL.cl, &nr, sizeof(int)) <= 0)
+    char request[100], domain[100], ip[100];
+    struct ThreadInfo thisThread;
+    thisThread = *((struct ThreadInfo *)arg);
+
+    if (read(thisThread.acceptDescriptor, request, sizeof(request)) <= 0)
     {
-        printf("[Thread %d]\n", tdL.idThread);
-        perror("Eroare la read() de la client.\n");
+        printf("[Thread %d]\n", thisThread.idThread);
+        perror("Read from client error!\n");
     }
 
-    printf("[Thread %d]Mesajul a fost receptionat...%d\n", tdL.idThread, nr);
-
-    /*pregatim mesajul de raspuns */
-    nr++;
-    printf("[Thread %d]Trimitem mesajul inapoi...%d\n", tdL.idThread, nr);
-
-    /* returnam mesajul clientului */
-    if (write(tdL.cl, &nr, sizeof(int)) <= 0)
-    {
-        printf("[Thread %d] ", tdL.idThread);
-        perror("[Thread]Eroare la write() catre client.\n");
+    char reqType = request[0];
+    int position = strlen(request) - 1;
+    
+    while(request[position] != '.'){
+        position--;
     }
-    else
-        printf("[Thread %d]Mesajul a fost trasmis cu succes.\n", tdL.idThread);
+
+    strcpy(domain, request + position + 1);
+
+    int tldAddress = getTLDAddress();
+
+    if(reqType == 'i'){
+        if (write(thisThread.acceptDescriptor, tldAddress, sizeof(tldAddress)) <= 0)
+        {
+            printf("[Thread %d] ", thisThread.idThread);
+            perror("Write to resolver error!\n");
+        }
+    } else {
+        char ip[100];
+        getIPFromServers(request, tldAddress, ip);
+
+        if (write(thisThread.acceptDescriptor, ip, sizeof(ip)) <= 0)
+        {
+            printf("[Thread %d] ", thisThread.idThread);
+            perror("Write to resolver error!\n");
+        }
+    }
+
+    close(thisThread.acceptDescriptor);
 }

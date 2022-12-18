@@ -1,90 +1,116 @@
-/* cliTCPIt.c - Exemplu de client TCP
-   Trimite un numar la server; primeste de la server numarul incrementat.
+#include "../includes.h"
 
-   Autor: Lenuta Alboaie  <adria@infoiasi.ro> (c)2009
-*/
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <errno.h>
-#include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <netdb.h>
-#include <string.h>
+char domain[100], ip[100];
 
-/* codul de eroare returnat de anumite apeluri */
+int sd;
+struct sockaddr_in server;
+
 extern int errno;
 
-/* portul de conectare la server*/
-int port;
-
-int main(int argc, char *argv[])
+void readDomainFromStdin()
 {
-    int sd;                    // descriptorul de socket
-    struct sockaddr_in server; // structura folosita pentru conectare
-                               // mesajul trimis
-    int nr = 0;
-    char buf[10];
+    printf("Enter the domain: ");
+    fflush(stdout);
+    read(0, domain, sizeof(domain));
 
-    /* exista toate argumentele in linia de comanda? */
-    if (argc != 3)
+    for(int i = 0; i < strlen(domain); i++)
     {
-        printf("Sintaxa: %s <adresa_server> <port>\n", argv[0]);
-        return -1;
+        if('A' <= domain[i] && domain[i] <= 'Z')
+        {
+            domain[i] += 32;
+        }
     }
 
-    /* stabilim portul */
-    port = atoi(argv[2]);
+    if(domain[0] == 'w' && domain[1] == 'w' && domain[2] == 'w' && domain[3] == '.')
+    {
+        strcpy(domain, domain + 4);
+    }
+}
 
-    /* cream socketul */
+void connectToServer()
+{
+    int sd;
+    struct sockaddr_in server;
+
     if ((sd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
     {
-        perror("Eroare la socket().\n");
-        return errno;
+        perror("Socket error!\n");
+        exit(errno);
     }
 
-    /* umplem structura folosita pentru realizarea conexiunii cu serverul */
-    /* familia socket-ului */
     server.sin_family = AF_INET;
-    /* adresa IP a serverului */
-    server.sin_addr.s_addr = inet_addr(argv[1]);
-    /* portul de conectare */
-    server.sin_port = htons(port);
+    server.sin_addr.s_addr = inet_addr(IP);
+    server.sin_port = htons(RESOLVER_PORT);
 
-    /* ne conectam la server */
     if (connect(sd, (struct sockaddr *)&server, sizeof(struct sockaddr)) == -1)
     {
-        perror("[client]Eroare la connect().\n");
-        return errno;
+        perror("Connect error!.\n");
+        exit (errno);
     }
+}
 
-    /* citirea mesajului */
-    printf("[client]Introduceti un numar: ");
-    fflush(stdout);
-    read(0, buf, sizeof(buf));
-    nr = atoi(buf);
-    // scanf("%d",&nr);
+bool isDomainInCache()
+{
+    char data[100];
 
-    printf("[client] Am citit %d\n", nr);
-
-    /* trimiterea mesajului la server */
-    if (write(sd, &nr, sizeof(int)) <= 0)
+    FILE *f = fopen(CLIENT_CACHE_FILE, "r");
+    while (fgets(data, 100, f) != NULL)
     {
-        perror("[client]Eroare la write() spre server.\n");
-        return errno;
+        char *token = strtok(data, " ");
+        if (strcmp(token, domain) == 0)
+        {
+            token = strtok(NULL, " ");
+            strcpy(ip, token);
+            return true;
+        }
     }
 
-    /* citirea raspunsului dat de server
-       (apel blocant pina cind serverul raspunde) */
-    if (read(sd, &nr, sizeof(int)) < 0)
+    return false;
+}
+
+void writeDomainToServer()
+{
+    if (write(sd, domain, strlen(domain)) <= 0)
     {
-        perror("[client]Eroare la read() de la server.\n");
-        return errno;
+        perror("Write to resolver error!\n");
+        exit(errno);
     }
-    /* afisam mesajul primit */
-    printf("[client]Mesajul primit este: %d\n", nr);
+}
 
-    /* inchidem conexiunea, am terminat */
+void readIpFromServer()
+{
+    if (read(sd, ip, sizeof(ip)) < 0)
+    {
+        perror("Read error!\n");
+        exit(errno);
+    }
+}
+
+void printIp()
+{
+    printf("IP: %s", ip);
+}
+
+void saveIpInCache()
+{
+    FILE *f = fopen(CLIENT_CACHE_FILE, "a");
+    fprintf(f, "%s %s", domain, ip);
+    fclose(f);
+}
+
+int main(int argc, char *argv[]){
+    connectToServer();
+
+    readDomainFromStdin();
+
+    if(!isDomainInCache())
+    {
+        writeDomainToServer();
+        readIpFromServer();
+        saveIpInCache();
+    }
+
+    printIp();
+
     close(sd);
 }
