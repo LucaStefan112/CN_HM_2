@@ -106,7 +106,7 @@ bool isDomainInCache(char domain[], char ip[])
     char data[100];
 
     FILE *f = fopen(RESOLVER_CACHE_FILE, "r");
-    while (fgets(data, 100, f) != NULL)
+    while (fgets(data, sizeof(data), f) != NULL)
     {
         char *token = strtok(data, " ");
         if (strcmp(token, domain) == 0)
@@ -137,6 +137,8 @@ int getTLDAddress(char request[])
         perror("Socket error!\n");
         exit(errno);
     }
+
+    bzero(&root, sizeof(root));
 
     root.sin_family = AF_INET;
     root.sin_addr.s_addr = inet_addr(IP);
@@ -178,6 +180,8 @@ int getAuthAddress(char request[], int tldAddress)
         exit(errno);
     }
 
+    bzero(&topLevel, sizeof(topLevel));
+
     server.sin_family = AF_INET;
     server.sin_addr.s_addr = inet_addr(IP);
     server.sin_port = htons(tldAddress);
@@ -218,6 +222,8 @@ void getIpFromAuth(char domain[], int authAddress, char ip[])
         exit(errno);
     }
 
+    bzero(&auth, sizeof(auth));
+
     server.sin_family = AF_INET;
     server.sin_addr.s_addr = inet_addr(IP);
     server.sin_port = htons(authAddress);
@@ -253,6 +259,8 @@ void getIPFromServers(char request[], char ip[])
         perror("Socket error!\n");
         exit(errno);
     }
+
+    bzero(&root, sizeof(root));
 
     root.sin_family = AF_INET;
     root.sin_addr.s_addr = inet_addr(IP);

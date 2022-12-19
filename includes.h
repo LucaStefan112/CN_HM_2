@@ -27,3 +27,5 @@
 #define AUTHORATIVE_INFO_FILE_1 "authorative_1.info"
 #define AUTHORATIVE_INFO_FILE_2 "authorative_2.info"
 #define AUTHORATIVE_INFO_FILE_3 "authorative_3.info"
+
+#define NOT_FOUND "404"
