@@ -127,28 +127,28 @@ void saveIpInCache(char domain[], char ip[])
     fclose(f);
 }
 
-int getTLDAddress(char domain[])
+int getTLDAddress(char request[])
 {
-    int sd;
-    struct sockaddr_in server;
+    int rootDescriptor;
+    struct sockaddr_in root;
 
-    if ((sd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+    if ((rootDescriptor = socket(AF_INET, SOCK_STREAM, 0)) == -1)
     {
         perror("Socket error!\n");
         exit(errno);
     }
 
-    server.sin_family = AF_INET;
-    server.sin_addr.s_addr = inet_addr(IP);
-    server.sin_port = htons(ROOT_PORT);
+    root.sin_family = AF_INET;
+    root.sin_addr.s_addr = inet_addr(IP);
+    root.sin_port = htons(ROOT_PORT);
 
-    if (connect(sd, (struct sockaddr *)&server, sizeof(struct sockaddr)) == -1)
+    if (connect(rootDescriptor, (struct sockaddr *)&root, sizeof(struct sockaddr)) == -1)
     {
         perror("Connect error!.\n");
         exit (errno);
     }
 
-    if (write(sd, domain, strlen(domain)) <= 0)
+    if (write(rootDescriptor, request, strlen(request)) <= 0)
     {
         perror("Write to root error!\n");
         exit(errno);
@@ -156,23 +156,23 @@ int getTLDAddress(char domain[])
 
     int tldAddress;
 
-    if (read(sd, &tldAddress, sizeof(tldAddress)) < 0)
+    if (read(rootDescriptor, &tldAddress, sizeof(tldAddress)) < 0)
     {
         perror("Read error!\n");
         exit(errno);
     }
 
-    close(sd);
+    close(rootDescriptor);
 
     return tldAddress;
 }
 
-int getAuthAddress(char domain[], int tldAddress)
+int getAuthAddress(char request[], int tldAddress)
 {
-    int sd;
-    struct sockaddr_in server;
+    int topLevelDescriptor;
+    struct sockaddr_in topLevel;
 
-    if ((sd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+    if ((topLevelDescriptor = socket(AF_INET, SOCK_STREAM, 0)) == -1)
     {
         perror("Socket error!\n");
         exit(errno);
@@ -182,13 +182,13 @@ int getAuthAddress(char domain[], int tldAddress)
     server.sin_addr.s_addr = inet_addr(IP);
     server.sin_port = htons(tldAddress);
 
-    if (connect(sd, (struct sockaddr *)&server, sizeof(struct sockaddr)) == -1)
+    if (connect(topLevelDescriptor, (struct sockaddr *)&topLevel, sizeof(struct sockaddr)) == -1)
     {
         perror("Connect error!.\n");
         exit (errno);
     }
 
-    if (write(sd, domain, strlen(domain)) <= 0)
+    if (write(topLevelDescriptor, request, strlen(request)) <= 0)
     {
         perror("Write to tld error!\n");
         exit(errno);
@@ -196,23 +196,23 @@ int getAuthAddress(char domain[], int tldAddress)
 
     int authAddress;
 
-    if (read(sd, &authAddress, sizeof(authAddress)) < 0)
+    if (read(topLevelDescriptor, &authAddress, sizeof(authAddress)) < 0)
     {
         perror("Read error!\n");
         exit(errno);
     }
 
-    close(sd);
+    close(topLevelDescriptor);
 
     return authAddress;
 }
 
 void getIpFromAuth(char domain[], int authAddress, char ip[])
 {
-    int sd;
-    struct sockaddr_in server;
+    int authDescriptor;
+    struct sockaddr_in auth;
 
-    if ((sd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+    if ((authDescriptor = socket(AF_INET, SOCK_STREAM, 0)) == -1)
     {
         perror("Socket error!\n");
         exit(errno);
@@ -222,25 +222,61 @@ void getIpFromAuth(char domain[], int authAddress, char ip[])
     server.sin_addr.s_addr = inet_addr(IP);
     server.sin_port = htons(authAddress);
 
-    if (connect(sd, (struct sockaddr *)&server, sizeof(struct sockaddr)) == -1)
+    if (connect(authDescriptor, (struct sockaddr *)&auth, sizeof(struct sockaddr)) == -1)
     {
         perror("Connect error!.\n");
         exit (errno);
     }
 
-    if (write(sd, domain, strlen(domain)) <= 0)
+    if (write(authDescriptor, domain, strlen(domain)) <= 0)
     {
         perror("Write to auth error!\n");
         exit(errno);
     }
 
-    if (read(sd, &ip, sizeof(ip)) < 0)
+    if (read(authDescriptor, ip, sizeof(ip)) < 0)
     {
         perror("Read error!\n");
         exit(errno);
     }
 
-    close(sd);
+    close(authDescriptor);
+}
+
+void getIPFromServers(char request[], char ip[])
+{
+    int rootDescriptor;
+    struct sockaddr_in root;
+
+    if ((rootDescriptor = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+    {
+        perror("Socket error!\n");
+        exit(errno);
+    }
+
+    root.sin_family = AF_INET;
+    root.sin_addr.s_addr = inet_addr(IP);
+    root.sin_port = htons(ROOT_PORT);
+
+    if (connect(rootDescriptor, (struct sockaddr *)&root, sizeof(struct sockaddr)) == -1)
+    {
+        perror("Connect error!.\n");
+        exit (errno);
+    }
+
+    if (write(rootDescriptor, request, strlen(request)) <= 0)
+    {
+        perror("Write to server error!\n");
+        exit(errno);
+    }
+
+    if (read(rootDescriptor, ip, sizeof(ip)) < 0)
+    {
+        perror("Read error!\n");
+        exit(errno);
+    }
+
+    close(rootDescriptor);
 }
 
 void communicateWithClient(void *arg)
@@ -260,13 +296,13 @@ void communicateWithClient(void *arg)
 
     if(!isDomainInCache(domain, ip)){
         if(reqType == 'i'){
-            getIPFromAuth(request, getAuthAddress(request, getTLDAddress(request)), ip);
+            getIPFromAuth(domain, getAuthAddress(request, getTLDAddress(request)), ip);
         } else {
             char authAddress[100];
             getIPFromServers(request, ip);
         }
 
-        saveIpInCache(domain, ip);
+        saveIpInCache(request, ip);
     }
 
     if (write(thisThread.acceptDescriptor, ip, strlen(ip)) <= 0)
@@ -274,6 +310,8 @@ void communicateWithClient(void *arg)
         printf("[Thread %d] ", thisThread.idThread);
         perror("Write to client error!\n");
     }
+
+    close(thisThread.acceptDescriptor);
 }
 
 int main()
