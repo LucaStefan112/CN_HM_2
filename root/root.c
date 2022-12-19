@@ -15,7 +15,6 @@ int socketDescriptor;
 int idThreadCounter;
 
 static void *treat(void *);
-void raspunde(void *);
 
 struct ThreadsList{
     pthread_t thread;

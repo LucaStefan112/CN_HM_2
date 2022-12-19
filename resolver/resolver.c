@@ -21,7 +21,6 @@ int socketDescriptor;
 int idThreadCounter;
 
 static void *treat(void *);
-void raspunde(void *);
 
 void createAndOpenServer(){
     if ((socketDescriptor = socket(AF_INET, SOCK_STREAM, 0)) == -1)
