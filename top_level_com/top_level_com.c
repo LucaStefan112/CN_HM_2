@@ -9,7 +9,7 @@ typedef struct ThreadInfo
 };
 
 struct sockaddr_in server;
-struct sockaddr_in resolver;
+struct sockaddr_in root;
 
 int socketDescriptor;
 int idThreadCounter;
@@ -33,11 +33,11 @@ void createAndOpenServer(){
     setsockopt(socketDescriptor, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
 
     bzero(&server, sizeof(server));
-    bzero(&resolver, sizeof(resolver));
+    bzero(&root, sizeof(root));
 
     server.sin_family = AF_INET;
     server.sin_addr.s_addr = htonl(INADDR_ANY);
-    server.sin_port = htons(ROOT_PORT);
+    server.sin_port = htons(TOP_LEVEL_COM_PORT);
 
     if (bind(socketDescriptor, (struct sockaddr *)&server, sizeof(struct sockaddr)) == -1)
     {
@@ -66,10 +66,10 @@ void *treat(void *arg)
     return (NULL);
 };
 
-int getTLDAddress(char domain[]){
+int getAuthAddress(char domain[]){
     char data[100];
 
-    FILE *f = fopen(ROOT_INFO_FILE, "r");
+    FILE *f = fopen(TOP_LEVEL_COM_INFO_FILE, "r");
     while (fgets(data, sizeof(data), f) != NULL)
     {
         char *token = strtok(data, " ");
@@ -83,41 +83,41 @@ int getTLDAddress(char domain[]){
     return -1;
 }
 
-void getIPFromServers(char request[], int tldAddress, char ip[]){
-    int topLevelDescriptor;
-    struct sockaddr_in topLevel;
+void getIPFromServers(char request[], int authAddress, char ip[]){
+    int authDescriptor;
+    struct sockaddr_in auth;
 
-    if ((topLevelDescriptor = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+    if ((authDescriptor = socket(AF_INET, SOCK_STREAM, 0)) == -1)
     {
         perror("Socket error!\n");
         return errno;
     }
 
-    bzero(&topLevel, sizeof(topLevel));
+    bzero(&auth, sizeof(auth));
 
-    topLevel.sin_family = AF_INET;
-    topLevel.sin_addr.s_addr = htonl(IP);
-    topLevel.sin_port = htons(tldAddress);
+    auth.sin_family = AF_INET;
+    auth.sin_addr.s_addr = htonl(IP);
+    auth.sin_port = htons(authAddress);
 
-    if (connect(topLevelDescriptor, (struct sockaddr *)&topLevel, sizeof(struct sockaddr)) < 0)
+    if (connect(authDescriptor, (struct sockaddr *)&auth, sizeof(struct sockaddr)) < 0)
     {
         perror("Connect error!\n");
         return errno;
     }
 
-    if (write(topLevelDescriptor, request, sizeof(request)) <= 0)
+    if (write(authDescriptor, request, sizeof(request)) <= 0)
     {
-        perror("Write to top level error!\n");
+        perror("Write to auth error!\n");
         return errno;
     }
 
-    if (read(topLevelDescriptor, ip, sizeof(ip)) <= 0)
+    if (read(authDescriptor, ip, sizeof(ip)) <= 0)
     {
-        perror("Read from top level error!\n");
+        perror("Read from auth error!\n");
         return errno;
     }
 
-    close(topLevelDescriptor);
+    close(authDescriptor);
 }
 
 void communicateWithClient(void *arg)
@@ -139,31 +139,32 @@ void communicateWithClient(void *arg)
         position--;
     }
 
-    strcpy(domain, request + position + 1);
+    strcpy(domain, request + 1);
+    domain[position] = '\0';
 
-    int tldAddress = getTLDAddress(domain);
+    int authAddress = getAuthAddress(domain);
 
-    if(tldAddress == -1){
+    if(authAddress == -1){
         if (write(thisThread.acceptDescriptor, NOT_FOUND, sizeof(NOT_FOUND)) <= 0)
         {
             printf("[Thread %d] ", thisThread.idThread);
-            perror("Write to resolver error!\n");
+            perror("Write to root error!\n");
         }
     } else {
         if(reqType == 'i'){
-            if (write(thisThread.acceptDescriptor, tldAddress, sizeof(tldAddress)) <= 0)
+            if (write(thisThread.acceptDescriptor, authAddress, sizeof(authAddress)) <= 0)
             {
                 printf("[Thread %d] ", thisThread.idThread);
-                perror("Write to resolver error!\n");
+                perror("Write to root error!\n");
             }
         } else {
             char ip[100];
-            getIPFromServers(request, tldAddress, ip);
+            getIPFromServers(request, authAddress, ip);
 
             if (write(thisThread.acceptDescriptor, ip, sizeof(ip)) <= 0)
             {
                 printf("[Thread %d] ", thisThread.idThread);
-                perror("Write to resolver error!\n");
+                perror("Write to root error!\n");
             }
         }
     }
@@ -173,13 +174,13 @@ void communicateWithClient(void *arg)
 
 void serveClients(){
     while(true){
-        int resolverDescriptor;
-        int length = sizeof(resolver);
+        int rootDescriptor;
+        int length = sizeof(root);
 
-        printf("Listening on port %d...\n", RESOLVER_PORT);
+        printf("Listening on port %d...\n", TOP_LEVEL_COM_PORT);
         fflush(stdout);
 
-        if ((resolverDescriptor = accept(socketDescriptor, (struct sockaddr *)&resolver, &length)) < 0)
+        if ((rootDescriptor = accept(socketDescriptor, (struct sockaddr *)&root, &length)) < 0)
         {
             perror("Accept error!\n");
             continue;
@@ -189,14 +190,14 @@ void serveClients(){
             start = (struct ThreadsList*)malloc(sizeof(struct ThreadsList));
             start->threadInfo = (struct ThreadInfo*)malloc(sizeof(struct ThreadInfo));
             start->threadInfo->idThread = idThreadCounter++;
-            start->threadInfo->acceptDescriptor = resolverDescriptor;
+            start->threadInfo->acceptDescriptor = rootDescriptor;
             start->next = NULL;
             last = start;
         } else {
             last->next = (struct ThreadsList*)malloc(sizeof(struct ThreadsList));
             last->next->threadInfo = (struct ThreadInfo*)malloc(sizeof(struct ThreadInfo));
             last->next->threadInfo->idThread = idThreadCounter++;
-            last->next->threadInfo->acceptDescriptor = resolverDescriptor;
+            last->next->threadInfo->acceptDescriptor = rootDescriptor;
             last->next->next = NULL;
             last = last->next;
         }
