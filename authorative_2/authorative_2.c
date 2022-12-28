@@ -2,7 +2,7 @@
 
 extern int errno;
 
-typedef struct ThreadInfo
+struct ThreadInfo
 {
     int idThread;
     int acceptDescriptor;
@@ -26,7 +26,8 @@ void createAndOpenServer(){
     if ((socketDescriptor = socket(AF_INET, SOCK_STREAM, 0)) == -1)
     {
         perror("Socket error!\n");
-        return errno;
+        exit(errno);
+
     }
 
     int on = 1;
@@ -42,29 +43,15 @@ void createAndOpenServer(){
     if (bind(socketDescriptor, (struct sockaddr *)&server, sizeof(struct sockaddr)) == -1)
     {
         perror("Bind error!\n");
-        return errno;
+        exit(errno);
     }
 
     if (listen(socketDescriptor, 5) == -1)
     {
         perror("Listen error.\n");
-        return errno;
+        exit(errno);
     }
 }
-
-void *treat(void *arg) 
-{
-    struct ThreadInfo thisThread;
-    thisThread = *((struct ThreadInfo *)arg);
-    fflush(stdout);
-    pthread_detach(pthread_self());
-
-    communicateWithClient((struct thData *)arg);
-    
-    close((intptr_t)arg);
-    
-    return (NULL);
-};
 
 bool getIPAddress(char domain[], char ip[]){
     char data[100];
@@ -107,7 +94,7 @@ void communicateWithClient(void *arg)
             perror("Write to root error!\n");
         }
     } else {
-        if (write(thisThread.acceptDescriptor, authAddress, sizeof(authAddress)) <= 0)
+        if (write(thisThread.acceptDescriptor, &authAddress, sizeof(authAddress)) <= 0)
         {
             printf("[Thread %d] ", thisThread.idThread);
             perror("Write to root error!\n");
@@ -117,6 +104,20 @@ void communicateWithClient(void *arg)
     close(thisThread.acceptDescriptor);
 }
 
+void *treat(void *arg) 
+{
+    struct ThreadInfo thisThread;
+    thisThread = *((struct ThreadInfo *)arg);
+    fflush(stdout);
+    pthread_detach(pthread_self());
+
+    communicateWithClient((struct thData *)arg);
+    
+    close((intptr_t)arg);
+    
+    return (NULL);
+};
+
 void serveClients(){
     while(true){
         int rootDescriptor;
@@ -125,7 +126,7 @@ void serveClients(){
         printf("Listening on port %d...\n", AUTHORATIVE_PORT_2);
         fflush(stdout);
 
-        if ((rootDescriptor = accept(socketDescriptor, (struct sockaddr *)&topLevel, &length)) < 0)
+        if ((rootDescriptor = accept(socketDescriptor, (struct sockaddr *)&topLevel, (socklen_t *)&length)) < 0)
         {
             perror("Accept error!\n");
             continue;
@@ -147,7 +148,7 @@ void serveClients(){
             last = last->next;
         }
 
-        pthread_create(last->thread, NULL, &treat, last->threadInfo);
+        pthread_create(&last->thread, NULL, &treat, last->threadInfo);
     }
 }
 

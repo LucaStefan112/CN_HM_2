@@ -2,7 +2,7 @@
 
 extern int errno;
 
-typedef struct ThreadInfo
+struct ThreadInfo
 {
     int idThread;
     int acceptDescriptor;
@@ -26,7 +26,7 @@ void createAndOpenServer(){
     if ((socketDescriptor = socket(AF_INET, SOCK_STREAM, 0)) == -1)
     {
         perror("Socket error!\n");
-        return errno;
+        exit(errno);
     }
 
     int on = 1;
@@ -42,13 +42,13 @@ void createAndOpenServer(){
     if (bind(socketDescriptor, (struct sockaddr *)&server, sizeof(struct sockaddr)) == -1)
     {
         perror("Bind error!\n");
-        return errno;
+        exit(errno); errno;
     }
 
     if (listen(socketDescriptor, 5) == -1)
     {
         perror("Listen error.\n");
-        return errno;
+        exit(errno); errno;
     }
 }
 
@@ -60,7 +60,7 @@ void serveClients(){
         printf("Listening on port %d...\n", RESOLVER_PORT);
         fflush(stdout);
 
-        if ((clientDescriptor = accept(socketDescriptor, (struct sockaddr *)&client, &length)) < 0)
+        if ((clientDescriptor = accept(socketDescriptor, (struct sockaddr *)&client, (socklen_t*)&length)) < 0)
         {
             perror("Accept error!\n");
             continue;
@@ -82,23 +82,9 @@ void serveClients(){
             last = last->next;
         }
 
-        pthread_create(last->thread, NULL, &treat, last->threadInfo);
+        pthread_create(&last->thread, NULL, &treat, last->threadInfo);
     }
 }
-
-void *treat(void *arg)
-{
-    struct ThreadInfo thisThread;
-    thisThread = *((struct ThreadInfo *)arg);
-    fflush(stdout);
-    pthread_detach(pthread_self());
-
-    communicateWithClient((struct thData *)arg);
-    
-    close((intptr_t)arg);
-    
-    return (NULL);
-};
 
 bool isDomainInCache(char domain[], char ip[])
 {
@@ -239,7 +225,7 @@ void getIpFromAuth(char domain[], int authAddress, char ip[])
         exit(errno);
     }
 
-    if (read(authDescriptor, ip, sizeof(ip)) < 0)
+    if (read(authDescriptor, ip, 100) < 0)
     {
         perror("Read error!\n");
         exit(errno);
@@ -277,7 +263,7 @@ void getIPFromServers(char request[], char ip[])
         exit(errno);
     }
 
-    if (read(rootDescriptor, ip, sizeof(ip)) < 0)
+    if (read(rootDescriptor, ip, 100) < 0)
     {
         perror("Read error!\n");
         exit(errno);
@@ -303,7 +289,7 @@ void communicateWithClient(void *arg)
 
     if(!isDomainInCache(domain, ip)){
         if(reqType == 'i'){
-            getIPFromAuth(domain, getAuthAddress(request, getTLDAddress(request)), ip);
+            getIpFromAuth(domain, getAuthAddress(request, getTLDAddress(request)), ip);
         } else {
             char authAddress[100];
             getIPFromServers(request, ip);
@@ -320,6 +306,20 @@ void communicateWithClient(void *arg)
 
     close(thisThread.acceptDescriptor);
 }
+
+void *treat(void *arg)
+{
+    struct ThreadInfo thisThread;
+    thisThread = *((struct ThreadInfo *)arg);
+    fflush(stdout);
+    pthread_detach(pthread_self());
+
+    communicateWithClient(arg);
+    
+    close((intptr_t)arg);
+    
+    return (NULL);
+};
 
 int main()
 {

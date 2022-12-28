@@ -2,7 +2,7 @@
 
 extern int errno;
 
-typedef struct ThreadInfo
+struct ThreadInfo
 {
     int idThread;
     int acceptDescriptor;
@@ -26,7 +26,7 @@ void createAndOpenServer(){
     if ((socketDescriptor = socket(AF_INET, SOCK_STREAM, 0)) == -1)
     {
         perror("Socket error!\n");
-        return errno;
+        exit(errno);
     }
 
     int on = 1;
@@ -42,29 +42,15 @@ void createAndOpenServer(){
     if (bind(socketDescriptor, (struct sockaddr *)&server, sizeof(struct sockaddr)) == -1)
     {
         perror("Bind error!\n");
-        return errno;
+        exit(errno);
     }
 
     if (listen(socketDescriptor, 5) == -1)
     {
         perror("Listen error.\n");
-        return errno;
+        exit(errno);
     }
 }
-
-void *treat(void *arg) 
-{
-    struct ThreadInfo thisThread;
-    thisThread = *((struct ThreadInfo *)arg);
-    fflush(stdout);
-    pthread_detach(pthread_self());
-
-    communicateWithClient((struct thData *)arg);
-    
-    close((intptr_t)arg);
-    
-    return (NULL);
-};
 
 int getAuthAddress(char domain[]){
     char data[100];
@@ -83,38 +69,38 @@ int getAuthAddress(char domain[]){
     return -1;
 }
 
-void getIPFromServers(char request[], int authAddress, char ip[]){
+void getIpFromServers(char request[], int authAddress, char ip[]){
     int authDescriptor;
     struct sockaddr_in auth;
 
     if ((authDescriptor = socket(AF_INET, SOCK_STREAM, 0)) == -1)
     {
         perror("Socket error!\n");
-        return errno;
+        exit(errno);
     }
 
     bzero(&auth, sizeof(auth));
 
     auth.sin_family = AF_INET;
-    auth.sin_addr.s_addr = htonl(IP);
+    auth.sin_addr.s_addr = inet_addr(IP);
     auth.sin_port = htons(authAddress);
 
     if (connect(authDescriptor, (struct sockaddr *)&auth, sizeof(struct sockaddr)) < 0)
     {
         perror("Connect error!\n");
-        return errno;
+        exit(errno);
     }
 
-    if (write(authDescriptor, request, sizeof(request)) <= 0)
+    if (write(authDescriptor, request, strlen(request)) <= 0)
     {
         perror("Write to auth error!\n");
-        return errno;
+        exit(errno);
     }
 
-    if (read(authDescriptor, ip, sizeof(ip)) <= 0)
+    if (read(authDescriptor, ip, 100) <= 0)
     {
         perror("Read from auth error!\n");
-        return errno;
+        exit(errno);
     }
 
     close(authDescriptor);
@@ -152,16 +138,16 @@ void communicateWithClient(void *arg)
         }
     } else {
         if(reqType == 'i'){
-            if (write(thisThread.acceptDescriptor, authAddress, sizeof(authAddress)) <= 0)
+            if (write(thisThread.acceptDescriptor, &authAddress, sizeof(authAddress)) <= 0)
             {
                 printf("[Thread %d] ", thisThread.idThread);
                 perror("Write to root error!\n");
             }
         } else {
             char ip[100];
-            getIPFromServers(request, authAddress, ip);
+            getIpFromServers(request, authAddress, ip);
 
-            if (write(thisThread.acceptDescriptor, ip, sizeof(ip)) <= 0)
+            if (write(thisThread.acceptDescriptor, ip, strlen(ip)) <= 0)
             {
                 printf("[Thread %d] ", thisThread.idThread);
                 perror("Write to root error!\n");
@@ -172,6 +158,20 @@ void communicateWithClient(void *arg)
     close(thisThread.acceptDescriptor);
 }
 
+void *treat(void *arg) 
+{
+    struct ThreadInfo thisThread;
+    thisThread = *((struct ThreadInfo *)arg);
+    fflush(stdout);
+    pthread_detach(pthread_self());
+
+    communicateWithClient((struct thData *)arg);
+    
+    close((intptr_t)arg);
+    
+    return (NULL);
+};
+
 void serveClients(){
     while(true){
         int rootDescriptor;
@@ -180,7 +180,7 @@ void serveClients(){
         printf("Listening on port %d...\n", TOP_LEVEL_COM_PORT);
         fflush(stdout);
 
-        if ((rootDescriptor = accept(socketDescriptor, (struct sockaddr *)&root, &length)) < 0)
+        if ((rootDescriptor = accept(socketDescriptor, (struct sockaddr *)&root, (socklen_t*)&length)) < 0)
         {
             perror("Accept error!\n");
             continue;
@@ -202,7 +202,7 @@ void serveClients(){
             last = last->next;
         }
 
-        pthread_create(last->thread, NULL, &treat, last->threadInfo);
+        pthread_create(&last->thread, NULL, &treat, last->threadInfo);
     }
 }
 
