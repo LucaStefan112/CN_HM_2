@@ -117,13 +117,13 @@ void saveIpInCache()
 int main(){
     readDomainFromStdin();
 
-    if(!isDomainInCache())
-    {
+    // if(!isDomainInCache())
+    // {
         connectToResolver();
         writeDomainToResolver();
         readIpFromResolver();
-        saveIpInCache();
-    }
+        // saveIpInCache();
+    // }
 
     printIp();
 
