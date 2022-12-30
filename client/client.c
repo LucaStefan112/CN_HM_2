@@ -100,6 +100,8 @@ bool isDomainInCache()
         }
     }
 
+    fclose(f);
+
     return false;
 }
 
