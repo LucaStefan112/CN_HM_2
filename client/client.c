@@ -7,6 +7,31 @@ struct sockaddr_in resolver;
 
 extern int errno;
 
+bool isDomainValid(char domain[]){
+
+    char domainCopy[100];
+    strcpy(domainCopy, domain);
+
+    if(domainCopy[0] == 'w' && domainCopy[1] == 'w' && domainCopy[2] == 'w' && domainCopy[3] == '.'){
+        strcpy(domainCopy, domainCopy + 4);
+    }
+
+    if(strlen(domainCopy) < 3 || strlen(domainCopy) > 63){
+        return false;
+    }
+
+    for(int i = 0; i < strlen(domain); i++){
+        if( !('a' <= domain[i] && domain[i] <= 'z') && 
+            !('A' <= domain[i] && domain[i] <= 'Z') &&
+            !('0' <= domain[i] && domain[i] <= '9') &&
+            domain[i] != '.' && domain[i] != '-'){
+            return false;
+        }
+    }
+
+    return true;
+}
+
 void readDomainFromStdin()
 {
     system("clear");
@@ -109,21 +134,58 @@ void printIp()
 
 void saveIpInCache()
 {
-    FILE *f = fopen(CLIENT_CACHE_FILE, "a");
-    fprintf(f, "%s %s\n", domain, ip);
-    fclose(f);
+    FILE *f1 = fopen(CLIENT_CACHE_FILE, "r");
+    FILE *f2 = fopen(CLIENT_CACHE_FILE_TMP, "w");
+
+    char data[100];
+
+    struct timeval tp;
+    gettimeofday(&tp, NULL);
+    long int ms = tp.tv_sec * 1000 + tp.tv_usec / 1000;
+
+    while (fgets(data, sizeof(data), f1) != NULL)
+    {
+        char thisDomain[100], thisIp[100];
+        char *token = strtok(data, " ");
+        strcpy(thisDomain, token);
+        token = strtok(NULL, " ");
+        strcpy(thisIp, token);
+        token = strtok(NULL, " ");
+        long int timestamp = atol(token);
+
+        if (ms - timestamp < 600000)
+        {
+            fprintf(f2, "%s %s %ld\n", thisDomain, thisIp, timestamp);
+        }
+    }
+
+    fprintf(f2, "%s %s %ld\n", domain, ip, ms);
+
+    fclose(f1);
+    fclose(f2);
+
+    remove(CLIENT_CACHE_FILE);
+    rename(CLIENT_CACHE_FILE_TMP, CLIENT_CACHE_FILE);
 }
 
 int main(){
     readDomainFromStdin();
 
-    // if(!isDomainInCache())
-    // {
+    if(!isDomainValid(domain)){
+        printf("Invalid domain!\n");
+        exit(0);
+    }
+
+    if(!isDomainInCache())
+    {
         connectToResolver();
         writeDomainToResolver();
         readIpFromResolver();
-        // saveIpInCache();
-    // }
+
+        if(strcmp(ip, NOT_FOUND) != 0){
+            saveIpInCache();
+        }
+    }
 
     printIp();
 
