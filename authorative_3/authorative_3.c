@@ -64,9 +64,12 @@ bool getIPAddress(char domain[], char ip[]){
         {
             token = strtok(NULL, " ");
             strcpy(ip, token);
+            ip[strlen(ip) - 1] = '\0';
             return true;
         }
     }
+
+    fclose(f);
 
     return false;
 }
@@ -85,16 +88,14 @@ void communicateWithClient(void *arg)
 
     strcpy(domain, request + 1);
 
-    int authAddress = getIPAddress(domain, ip);
-
-    if(authAddress == -1){
+    if(!getIPAddress(domain, ip)){
         if (write(thisThread.acceptDescriptor, NOT_FOUND, sizeof(NOT_FOUND)) <= 0)
         {
             printf("[Thread %d] ", thisThread.idThread);
             perror("Write to root error!\n");
         }
     } else {
-        if (write(thisThread.acceptDescriptor, &authAddress, sizeof(authAddress)) <= 0)
+        if (write(thisThread.acceptDescriptor, ip, strlen(ip)) <= 0)
         {
             printf("[Thread %d] ", thisThread.idThread);
             perror("Write to root error!\n");

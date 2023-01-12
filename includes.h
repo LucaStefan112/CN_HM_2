@@ -5,6 +5,8 @@
 #include <arpa/inet.h>
 #include <stdbool.h>
 #include <pthread.h>
+#include <sys/time.h>
+#include <regex.h>
 
 #define IP "0.0.0.0"
 
@@ -18,7 +20,9 @@
 #define AUTHORATIVE_PORT_3 4008
 
 #define CLIENT_CACHE_FILE "client.cache"
+#define CLIENT_CACHE_FILE_TMP "client.cache.tmp"
 #define RESOLVER_CACHE_FILE "resolver.cache"
+#define RESOLVER_CACHE_FILE_TMP "resolver.cache.tmp"
 
 #define ROOT_INFO_FILE "root.info"
 #define TOP_LEVEL_COM_INFO_FILE "top_level_com.info"
@@ -29,3 +33,4 @@
 #define AUTHORATIVE_INFO_FILE_3 "authorative_3.info"
 
 #define NOT_FOUND "404"
+#define NOT_FOUND_D -1

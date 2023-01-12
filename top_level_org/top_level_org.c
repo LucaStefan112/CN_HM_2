@@ -66,6 +66,8 @@ int getAuthAddress(char domain[]){
         }
     }
 
+    fclose(f);
+
     return -1;
 }
 
@@ -119,22 +121,24 @@ void communicateWithClient(void *arg)
     }
 
     char reqType = request[0];
-    int position = strlen(request) - 1;
-    
-    while(request[position] != '.'){
-        position--;
-    }
 
     strcpy(domain, request + 1);
-    domain[position] = '\0';
 
     int authAddress = getAuthAddress(domain);
 
     if(authAddress == -1){
-        if (write(thisThread.acceptDescriptor, NOT_FOUND, sizeof(NOT_FOUND)) <= 0)
-        {
-            printf("[Thread %d] ", thisThread.idThread);
-            perror("Write to root error!\n");
+        if(reqType == 'r'){
+            if (write(thisThread.acceptDescriptor, NOT_FOUND, sizeof(NOT_FOUND)) <= 0)
+            {
+                printf("[Thread %d] ", thisThread.idThread);
+                perror("Write to resolver error!\n");
+            }
+        } else {
+            if (write(thisThread.acceptDescriptor, &authAddress, sizeof(authAddress)) <= 0)
+            {
+                printf("[Thread %d] ", thisThread.idThread);
+                perror("Write to resolver error!\n");
+            }
         }
     } else {
         if(reqType == 'i'){

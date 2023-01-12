@@ -66,6 +66,8 @@ int getTLDAddress(char domain[]){
         }
     }
 
+    fclose(f);
+
     return -1;
 }
 
@@ -130,10 +132,18 @@ void communicateWithClient(void *arg)
     int tldAddress = getTLDAddress(domain);
 
     if(tldAddress == -1){
-        if (write(thisThread.acceptDescriptor, NOT_FOUND, sizeof(NOT_FOUND)) <= 0)
-        {
-            printf("[Thread %d] ", thisThread.idThread);
-            perror("Write to resolver error!\n");
+        if(reqType == 'r'){
+            if (write(thisThread.acceptDescriptor, NOT_FOUND, sizeof(NOT_FOUND)) <= 0)
+            {
+                printf("[Thread %d] ", thisThread.idThread);
+                perror("Write to resolver error!\n");
+            }
+        } else {
+            if (write(thisThread.acceptDescriptor, &tldAddress, sizeof(tldAddress)) <= 0)
+            {
+                printf("[Thread %d] ", thisThread.idThread);
+                perror("Write to resolver error!\n");
+            }
         }
     } else {
         if(reqType == 'i'){
