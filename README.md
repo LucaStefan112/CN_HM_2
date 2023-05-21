@@ -1,4 +1,4 @@
-##DNS Simulator##
+#DNS Simulator#
 
 This repository contains a DNS (Domain Name System) simulator implemented in C. The simulator consists of various components, including one resolver server, one root server, three top-level domain (TLD) servers, and three authoritative servers. Additionally, there is a client program that can send DNS requests to the resolver.
 
